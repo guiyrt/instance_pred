@@ -1,0 +1,39 @@
+services:
+  intent-engine:
+    build: 
+      context: .
+    container_name: intent_prediction_server
+    ports:
+      - "8000:8000"
+    
+    environment:
+      # Networking
+      - INTENT__HOST=0.0.0.0
+      - INTENT__WEB_PORT=8000
+
+      # ZMQ Configuration
+      - INTENT__GAZE_ZMQ_HOST=tcp://host.docker.internal:5555
+      
+      # Parquet Sink Configuration
+      - INTENT__PARQUET__ENABLED=true
+      - INTENT__PARQUET__OUTPUT_DIR=/app/data
+      - INTENT__PARQUET__MAX_TIME_FLUSH_SEC=30
+
+      # 
+      - INTENT__TERMINAL__ENABLED=true
+      
+      # Logging
+      - INTENT__LOGGING__LEVEL=DEBUG
+    
+    volumes:
+      # Mounts local ./data folder to the container's data folder
+      - ./data:/app/data
+    
+    # Required for host.docker.internal to work on Linux
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    restart: unless-stopped
+
+volumes:
+  data:
