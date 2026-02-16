@@ -1,5 +1,5 @@
 import logging
-from typing import ItemsView
+from typing import ItemsView, Optional
 
 from ..models import Popup, TrackLabel, TrackPos
 from .aircraft import AircraftState
@@ -81,5 +81,5 @@ class WorldState:
         else:
             logger.warning("Received remove for non-existing measurement_id %d", measurement_id)
                     
-    def process_gaze_event(self, x: float | None, y: float | None, timestamp_ms: float) -> None:
-        self.gaze.update(x, y, timestamp_ms)
+    def process_gaze_event(self, timestamp_ms: int, x: Optional[int], y: Optional[int]) -> None:
+        self.gaze.update(timestamp_ms, x, y)

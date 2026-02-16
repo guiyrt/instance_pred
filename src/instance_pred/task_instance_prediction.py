@@ -94,11 +94,11 @@ class IntentSystem:
                 )
         
 
-    def ingest_gaze(self, x: float | None, y: float | None, timestamp_ms: float) -> None:
+    def ingest_gaze(self, timestamp_ms: int, x: int , y: int, valid: bool) -> None:
         """
         The 'Heartbeat'. Updates Physics and Scoring.
         """
-        self.world.process_gaze_event(x, y, timestamp_ms)
+        self.world.process_gaze_event(timestamp_ms, x if valid else None, y if valid else None)
         self.scorer.compute_scores(timestamp_ms, self.world)
         
     def get_prediction(self, timestamp_ms: float) -> InstancePrediction:

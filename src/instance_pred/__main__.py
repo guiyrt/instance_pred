@@ -1,6 +1,5 @@
 import asyncio
 import typer
-import uvicorn
 from pathlib import Path
 from typing import Annotated, Optional
 import logging
@@ -24,7 +23,9 @@ def serve():
     settings = ServerSettings()
     logger = get_logger(settings)
     logger.debug(settings)
-    logger.info(f"Starting Live Engine | Web: {settings.web_port} | Gaze: {settings.gaze_zmq_host}")
+    logger.info(f"Starting Live Engine | ASD: {settings.asd_nats_host} | Gaze: {settings.gaze_zmq_host}")
+
+    logging.getLogger("nats").setLevel(logging.CRITICAL)
 
     # Initialize runner
     runner = ServerRunner(
@@ -33,16 +34,12 @@ def serve():
         ),
         sinks=create_sinks(settings),
         gaze_zmq_host=settings.gaze_zmq_host,
+        asd_nats_host=settings.asd_nats_host,
         sampling_interval_ms=settings.sampling_interval_ms
     )
 
     # Handover to uvicorn
-    uvicorn.run(
-        runner.app, 
-        host=settings.host, 
-        port=settings.web_port,
-        log_level=settings.logging.level.lower()
-    )
+    asyncio.run(runner.run())
 
 @app.command()
 def playback(
@@ -116,8 +113,6 @@ def _resolve_io[T: OfflineSettings](settings: T, session_dir: Optional[Path], ou
 
 def _run_offline(settings: OfflineSettings, logger: logging.Logger):
     """Shared logic for initializing and running the OfflineRunner."""
-    print(settings)
-
     runner = OfflineRunner(
         session=SessionLoader(settings.session_path),
         system=IntentSystem(create_scorer_config(settings)),

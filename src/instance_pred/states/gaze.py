@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Optional
 
 from ..models import ScreenPosition
 
@@ -19,8 +19,8 @@ class GazeState:
     def has_signal(self) -> bool:
         return self.pos is not None
 
-    def update(self, x: float | None, y: float | None, timestamp_ms: float) -> None:
-        dt_sec = (timestamp_ms - self._last_update_ms) / 1000.0
+    def update(self, timestamp_ms: int, x: Optional[int], y: Optional[int]) -> None:
+        dt_sec = (timestamp_ms - self._last_update_ms) / 1e3
         
         # Skip duplicates or out-of-order packets
         if dt_sec <= 0:

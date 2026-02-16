@@ -7,9 +7,8 @@ ENV UV_LINK_MODE=copy
 ENV UV_NO_DEV=1
 WORKDIR /app
 
-
 # Install project
-COPY pyproject.toml uv.lock src/ aware-protos/ ./
+COPY pyproject.toml uv.lock ./
 COPY src/ ./src
 COPY aware-protos/ ./aware-protos
 RUN uv sync --locked --no-editable
@@ -25,9 +24,6 @@ WORKDIR /app
 # Copy the virtual environment from the builder
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
-
-# Networking
-EXPOSE 8000
 
 # This calls the "instance-pred" script defined in your pyproject.toml
 CMD ["instance-pred", "serve"]

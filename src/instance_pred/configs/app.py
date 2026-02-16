@@ -27,17 +27,14 @@ class AppSettings(BaseSettings):
         env_prefix="INTENT__",
         env_file=".env",
         env_nested_delimiter="__", 
-        case_sensitive=False,
-        extra="ignore"
+        case_sensitive=False
     )
 
 # <<< App settings for running in server >>>
 class ServerSettings(AppSettings):
     parquet: ServerParquetSinkConfig = Field(default_factory=ServerParquetSinkConfig)
     gaze_zmq_host: str = "tcp://localhost:5555"
-    web_port: int = 8000
-    host: str = "0.0.0.0"
-
+    asd_nats_host: str = "nats://localhost:4222"
 
 # <<< Base offline settings, plus specific for bulk and playback executions
 class OfflineSettings(AppSettings):

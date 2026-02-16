@@ -2,19 +2,16 @@ import asyncio
 import struct
 import time
 import zmq.asyncio
-from contextlib import asynccontextmanager
 from typing import Sequence, Final
+import google.protobuf.json_format
 
-from fastapi import FastAPI, Request, Response
 from aware_protos.aware.proto import messages_pb2
+import nats
+import zlib
 
 from .base import PredictionRunner
 from ..task_instance_prediction import IntentSystem
 from ..sinks import PredictionSink
-
-# Pre-compiled struct for ZMQ unpacking (!=Network Endian, d=double/float64)
-# Format: x (double), y (double), timestamp (double)
-_GAZE_STRUCT = struct.Struct("!ddd")
 
 class ServerRunner(PredictionRunner):
     """
@@ -34,77 +31,92 @@ class ServerRunner(PredictionRunner):
         system: IntentSystem,
         sinks: Sequence[PredictionSink],
         gaze_zmq_host: str,
+        asd_nats_host: str,
         sampling_interval_ms: int,
     ):
         super().__init__(system, sinks, sampling_interval_ms)
         self.gaze_zmq_host = gaze_zmq_host
-        
-        # Internal State
+        self.asd_nats_host = asd_nats_host
         self._running = False
-        self._zmq_task: asyncio.Task | None = None
-        self._predict_task: asyncio.Task | None = None
 
-        # Expose the app so uvicorn can serve it
-        self.app = FastAPI(title="Intent Engine", lifespan=self._lifespan)
-        self.app.post("/asd")(self._handle_asd_post)
-        self.app.get("/health")(self._health_check)
-
-    @asynccontextmanager
-    async def _lifespan(self, _: FastAPI):
-        """
-        Manages the startup/shutdown sequence.
-        Crucial for ensuring Sinks are ready before we accept data.
-        """
-        self.logger.info("System Starting...")
+    async def run(self):
+        """The main entry point for the application."""
+        self.logger.info("Starting Intent Engine...")
         self._running = True
         
-        # Start
         await self.start_sinks()
-        self._zmq_task = asyncio.create_task(self._zmq_loop())
-        self._predict_task = asyncio.create_task(self._predict_loop())
-        
-        yield # Server is running and accepting requests
-        
-        self.logger.info("System shutting down...")
-        self._running = False
-        
-        # Stop
-        self._zmq_task.cancel()
-        self._predict_task.cancel()
-        await asyncio.gather(self._zmq_task, self._predict_task, return_exceptions=True)
-        await self.close_sinks()
 
-        self.logger.info("Shutdown complete.")
+        # Create the tasks for our 3 concurrent loops
+        tasks = (
+            asyncio.create_task(self._gaze_loop(), name="Gaze_ZMQ"),
+            asyncio.create_task(self._asd_loop(), name="ASD_NATS"),
+            asyncio.create_task(self._predict_loop(), name="Predictor")
+        )
 
-    async def _health_check(self):
-        return {
-            "status": "ok" if self._running else "starting",
-            "sinks": [type(s).__name__ for s in self.sinks],
-            "zmq_connected": self.gaze_zmq_host
-        }
-    
-    async def _parse_proto(self, payload: bytes) -> messages_pb2.Event:
-        event = messages_pb2.Event()
-        event.ParseFromString(payload)
-        return event
-
-    async def _handle_asd_post(self, request: Request):
-        """Ingest Protobuf Events via HTTP."""
         try:
-            payload = await request.body()
-            event = await asyncio.to_thread(self._parse_proto, payload)
-            self.system.ingest_proto_event(event)
-            
-            return Response(status_code=202)
-            
+            # Run all loops until one fails or are cancelled
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            self.logger.info("Shutdown signal received.")
         except Exception as e:
-            self.logger.warning(f"Failed to process ASD event: {e}")
-            return Response(content="Invalid Protobuf", status_code=400)
+            self.logger.critical(f"Unexpected system crash: {e}", exc_info=True)
+        finally:
+            self._running = False
+            for t in tasks:
+                t.cancel()
+            
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await self.close_sinks()
+            self.logger.info("Shutdown complete.")
+    
+    def _parse_proto(self, payload: str) -> messages_pb2.Event:
+        return google.protobuf.json_format.Parse(payload, messages_pb2.Event())
 
-    async def _zmq_loop(self):
+    async def _asd_loop(self):
+        self.logger.info(f"Connecting to NATS: {self.asd_nats_host}")
+        nc = nats.NATS()
+
+        while self._running:
+            try:
+                await asyncio.wait_for(
+                    nc.connect(
+                        self.asd_nats_host,
+                        allow_reconnect=True,
+                        max_reconnect_attempts=-1
+                    ),
+                    timeout=5
+                )
+                self.logger.info("Successfully connected to NATS.")
+                break # Exit while loop on success
+                
+            except (asyncio.TimeoutError, Exception) as e:
+                self.logger.warning(f"NATS connection failed. Retrying in 5s... ({type(e).__name__})")
+        
+        try:
+            sub = await nc.subscribe("polaris.ASDEvent")
+
+            async for msg in sub.messages:
+                data = msg.data
+
+                if msg.header and msg.header["deflate"] == "1":
+                    data = zlib.decompress(data)
+                
+                event = await asyncio.to_thread(self._parse_proto, data.decode())
+                self.system.ingest_proto_event(event)
+        
+        except asyncio.CancelledError:
+            pass # Standard shutdown
+        except Exception as e:
+            self.logger.error(f"ASD NATS Loop crashed: {e}", exc_info=True)
+        finally:
+            await sub.unsubscribe()
+            await nc.close()
+
+    async def _gaze_loop(self):
         """High-Frequency Gaze Input Loop (Consumer)."""
         ctx = zmq.asyncio.Context()
         sock = ctx.socket(zmq.SUB)
+        gaze_struct = struct.Struct("!qii?")
         
         # Auto-reconnect if ZMQ publisher dies/restarts
         sock.setsockopt(zmq.RECONNECT_IVL, 1000)
@@ -116,11 +128,8 @@ class ServerRunner(PredictionRunner):
         try:
             while self._running:
                 msg = await sock.recv()
-                
-                # Fast validation & slicing
-                if len(msg) == 28: # 4 bytes 'gaze' + 3 doubles (8 bytes each)
-                    self.system.ingest_gaze(*_GAZE_STRUCT.unpack(msg[4:]))
-                    
+                self.system.ingest_gaze(*gaze_struct.unpack(msg[4:]))
+
         except asyncio.CancelledError:
             pass # Standard shutdown
         except Exception as e:

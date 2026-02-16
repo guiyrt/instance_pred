@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ParquetSink(PredictionSink):
     _SCHEMA: Final[pa.Schema] = pa.schema([
-        ("timestamp_ms", pa.float64()),
+        ("timestamp", pa.timestamp('ms')),
         ("callsign", pa.string()),
         ("score", pa.float64()),
         ("candidate_callsigns", pa.list_(pa.string())),

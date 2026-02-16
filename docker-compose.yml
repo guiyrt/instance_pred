@@ -3,14 +3,8 @@ services:
     build: 
       context: .
     container_name: intent_prediction_server
-    ports:
-      - "8000:8000"
     
     environment:
-      # Networking
-      - INTENT__HOST=0.0.0.0
-      - INTENT__WEB_PORT=8000
-
       # ZMQ Configuration
       - INTENT__GAZE_ZMQ_HOST=tcp://host.docker.internal:5555
       
