@@ -47,6 +47,10 @@ stop: ## Stop all docker containers
 bulk: ## Run bulk processing (e.g. make bulk FILE=session.parquet)
 	instance-pred bulk
 
+.PHONY: playback
+playback: ## Run bulk processing (e.g. make bulk FILE=session.parquet)
+	instance-pred playback
+
 # --- Local Development (No Docker) ---
 .PHONY: clean
 clean: ## Remove temporary files, caches, and build artifacts

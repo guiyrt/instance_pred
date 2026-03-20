@@ -16,11 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ParquetSink(PredictionSink):
     _SCHEMA: Final[pa.Schema] = pa.schema([
-        ("timestamp", pa.timestamp('ms')),
-        ("callsign", pa.string()),
-        ("score", pa.float64()),
-        ("candidate_callsigns", pa.list_(pa.string())),
-        ("candidate_scores", pa.list_(pa.float64())),
+        ("timestamp_ms", pa.timestamp('ms')),
+        ("callsigns", pa.list_(pa.string())),
+        ("scores", pa.list_(pa.float64())),
+        ("indicators", pa.list_(pa.list_(pa.uint8()))),
     ])
 
     def __init__(
@@ -143,29 +142,29 @@ class ParquetSink(PredictionSink):
         Uses list pre-allocation for maximum performance.
         """
         size = len(batch)
-        # Pre-allocate columns (~15% speedup over appending)
+
+        # Pre-allocate columns
         timestamps = [None] * size
         callsigns = [None] * size
         scores = [None] * size
-        cand_calls = [[] for _ in range(size)]
-        cand_scores = [[] for _ in range(size)]
+        indicators = [None] * size
 
         for i, pred in enumerate(batch):
             timestamps[i] = pred.timestamp_ms
             
-            if (ac := pred.aircraft) is not None:
-                callsigns[i] = ac.callsign
-                scores[i] = ac.score
-                cand_calls[i] = [c.callsign for c in pred.candidates]
-                cand_scores[i] = [c.score for c in pred.candidates]
+            callsigns[i] = [c.callsign for c in pred.candidates]
+            scores[i] = [c.score for c in pred.candidates]
+            indicators[i] = [
+                [ind.value for ind in c.indicators] 
+                for c in pred.candidates
+            ]
 
         table = pa.Table.from_arrays(
             [
-                pa.array(timestamps, type=pa.float64()),
-                pa.array(callsigns, type=pa.string()),
-                pa.array(scores, type=pa.float64()),
-                pa.array(cand_calls, type=pa.list_(pa.string())),
-                pa.array(cand_scores, type=pa.list_(pa.float64())),
+                pa.array(timestamps, type=pa.timestamp("ms")),
+                pa.array(callsigns, type=pa.list_(pa.string())),
+                pa.array(scores, type=pa.list_(pa.float32())),
+                pa.array(indicators, type=pa.list_(pa.list_(pa.uint8()))),
             ],
             schema=self._SCHEMA
         )

@@ -1,11 +1,12 @@
+from datetime import datetime
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from aware_protos.tern.asd.events import asd_events_pb2
 
 
-class PopupMenu(Enum):
+class PopupMenu(StrEnum):
     CFLMenu = "CFLMenu"
     HeadingMenu = "HeadingMenu"
     WaypointMenu = "WaypointMenu"
@@ -13,7 +14,7 @@ class PopupMenu(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Popup:
-    timestamp_ms: float
+    timestamp: datetime
     callsign: str
     menu: PopupMenu
 
@@ -21,9 +22,9 @@ class Popup:
         return f"[{self.menu.value}|{self.callsign}]"
 
     @staticmethod
-    def from_proto(event: asd_events_pb2.Popup, timestamp_ms: int) -> "Popup":
+    def from_proto(event: asd_events_pb2.Popup, timestamp_ms: datetime) -> "Popup":
         return Popup(
-            timestamp_ms=timestamp_ms,
+            timestamp=timestamp_ms,
             callsign=event.flight_id.callsign,
             menu=PopupMenu(event.name)
         )
@@ -31,7 +32,7 @@ class Popup:
     @staticmethod
     def from_row(row: tuple[Any, ...]) -> "Popup":
         return Popup(
-            timestamp_ms=int(row.epoch_ms),
+            timestamp=row.timestamp_ms.to_pydatetime(),
             callsign=row.callsign,
             menu=PopupMenu(row.name)
         )

@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from .attention_indicator import AttentionIndicator
+
 @dataclass(frozen=True, slots=True)
 class ScorerConfig:
     """
@@ -11,13 +13,7 @@ class ScorerConfig:
     tau_decay: float
     
     # Target Scores
-    s_popup_opened: float
-    s_label_selected: float
-    s_label_hovered: float
-    s_label_parked: float
-    s_dist_measurement: float
-    s_fixation_label: float
-    s_fixation_pos: float
+    indicator_scores: dict[AttentionIndicator, float]
 
     # Thresholds
     gaze_threshold_label: int

@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import logging
 from typing import Final
 
@@ -14,7 +15,7 @@ class AircraftState:
         'active_dist_measurements',
     )
 
-    TTL_MS: Final[int] = 10_000
+    TTL: Final[timedelta] = timedelta(seconds=10)
 
     def __init__(
         self,
@@ -26,9 +27,9 @@ class AircraftState:
 
         self.active_dist_measurements: set[int] = set()
 
-    def is_stale(self, current_time_ms: float) -> bool:
-        return (self.track_label is None or self.track_label.is_stale(current_time_ms, self.TTL_MS)) and \
-            (self.track_pos is None or self.track_pos.is_stale(current_time_ms, self.TTL_MS)) and \
+    def is_stale(self, current_time: datetime) -> bool:
+        return (self.track_label is None or self.track_label.is_stale(current_time, self.TTL)) and \
+            (self.track_pos is None or self.track_pos.is_stale(current_time, self.TTL)) and \
             not self.active_dist_measurements
     
     def remove_dist_measurement(self, measurement_id: int) -> None:

@@ -8,7 +8,7 @@ ENV UV_NO_DEV=1
 WORKDIR /app
 
 # Install project
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src
 COPY aware-protos/ ./aware-protos
 RUN uv sync --locked --no-editable

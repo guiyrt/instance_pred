@@ -22,12 +22,12 @@ class SessionLoader:
         }
 
     @cached_property
-    def start_timestamp(self) -> int:
-        return int(min(df.epoch_ms.min() for df in self.events.values()))
+    def start_timestamp(self) -> pd.Timestamp:
+        return min(df.timestamp_ms.min() for df in self.events.values()).to_pydatetime()
 
     @cached_property
-    def end_timestamp(self) -> int:
-        return int(max(df.epoch_ms.max() for df in self.events.values()))
+    def end_timestamp(self) -> pd.Timestamp:
+        return max(df.timestamp_ms.max() for df in self.events.values()).to_pydatetime()
 
     @cache  
     def __len__(self) -> int:
@@ -41,13 +41,13 @@ class SessionLoader:
         def make_gen(event_type: EventType):
             df = self.events[event_type]
 
-            if not df.epoch_ms.is_monotonic_increasing:
-                df = df.sort_values("epoch_ms")
+            if not df.timestamp_ms.is_monotonic_increasing:
+                df = df.sort_values("timestamp_ms")
 
             for row in df.itertuples(index=False, name="Row"):
-                yield RowEvent(event_type, row.epoch_ms, row)
+                yield RowEvent(event_type, row.timestamp_ms, row)
 
         yield from heapq.merge(
             *(make_gen(event_type) for event_type in self.available_events),
-            key=lambda event: event.timestamp_ms
+            key=lambda event: event.timestamp
         )

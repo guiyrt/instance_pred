@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,7 +9,7 @@ from .screen_position import ScreenPosition
 
 @dataclass(frozen=True, slots=True)
 class TrackLabel:
-    timestamp_ms: int
+    timestamp: datetime
     
     top_left: ScreenPosition
     width: int
@@ -19,17 +20,17 @@ class TrackLabel:
     is_selected: bool
     on_pip: bool
 
-    def is_stale(self, current_time_ms: float, ttl: int) -> bool:
-        return (current_time_ms - self.timestamp_ms) > ttl
+    def is_stale(self, current_time: datetime, ttl: timedelta) -> bool:
+        return (current_time - self.timestamp) > ttl
 
     def contains(self, p: ScreenPosition, padding: int = 0) -> bool:
         return (self.top_left.x - padding <= p.x <= self.top_left.x + self.width + padding) and \
                (self.top_left.y - padding <= p.y <= self.top_left.y + self.height + padding)
 
     @staticmethod
-    def from_proto(payload: asd_events_pb2.TrackLabelPosition, timestamp_ms: float) -> "TrackLabel":
+    def from_proto(payload: asd_events_pb2.TrackLabelPosition, timestamp_ms: datetime) -> "TrackLabel":
         return TrackLabel(
-            timestamp_ms=timestamp_ms,
+            timestamp=timestamp_ms,
             top_left=ScreenPosition(payload.x, payload.y),
             width=payload.width,
             height=payload.height,
@@ -42,7 +43,7 @@ class TrackLabel:
     @staticmethod
     def from_row(row: tuple[Any, ...]) -> "TrackLabel":
         return TrackLabel(
-            timestamp_ms=int(row.epoch_ms),
+            timestamp=row.timestamp_ms.to_pydatetime(),
             top_left=ScreenPosition(float(row.x), float(row.y)),
             width=int(row.width),
             height=int(row.height),

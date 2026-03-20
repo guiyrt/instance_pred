@@ -5,7 +5,7 @@ from pydantic import Field, PositiveInt, PositiveFloat
 from typing import Optional
 
 from .scores import ScoreSettings
-from .sinks import BaseParquetSinkConfig, ServerParquetSinkConfig, BulkParquetSinkConfig, TerminalSinkConfig
+from .sinks import BaseParquetSinkConfig, ServerParquetSinkConfig, BulkParquetSinkConfig, TerminalSinkConfig, NATSSinkConfig
 from .utils import LoggingConfig
 
 # <<< General app settings >>>
@@ -16,6 +16,7 @@ class AppSettings(BaseSettings):
     
     # Sinks
     parquet: BaseParquetSinkConfig
+    nats: NATSSinkConfig = Field(default_factory=NATSSinkConfig)
     terminal: TerminalSinkConfig = Field(default_factory=TerminalSinkConfig)
 
     # Logging
@@ -33,8 +34,7 @@ class AppSettings(BaseSettings):
 # <<< App settings for running in server >>>
 class ServerSettings(AppSettings):
     parquet: ServerParquetSinkConfig = Field(default_factory=ServerParquetSinkConfig)
-    gaze_zmq_host: str = "tcp://localhost:5555"
-    asd_nats_host: str = "nats://localhost:4222"
+    nats_host: str = "nats://localhost:4222"
 
 # <<< Base offline settings, plus specific for bulk and playback executions
 class OfflineSettings(AppSettings):

@@ -26,7 +26,7 @@ class HeaderClock:
     """Animates independently of data updates."""
     def __init__(self):
         self.start_time: float = time.monotonic()
-        self.timestamp_ms: float = 0.0
+        self.timestamp: datetime = datetime.fromtimestamp(0, timezone.utc)
 
     def __rich__(self) -> Table:
         grid = Table.grid(expand=True)
@@ -38,7 +38,7 @@ class HeaderClock:
         # Time
         time_info = Text.assemble(
             ("UTC: ", "bold dim"),
-            (f"{datetime.fromtimestamp(self.timestamp_ms/1000, timezone.utc):%d %b %Y, %H:%M:%S} | ", "dim"),
+            (f"{self.timestamp.strftime('%d %b %Y, %H:%M:%S')} | ", "dim"),
             ("Uptime: ", "bold white"),
             (time.strftime("%H:%M:%S", time.gmtime(now - self.start_time)), "white")
         )
@@ -57,8 +57,7 @@ class RankingTable:
     _COLOR_DIM: Final[str] = "bright_black"
     _BAR_WIDTH: Final[int] = 20
 
-    def __init__(self, top_n: int = 5) -> None:
-        self.top_n = top_n
+    def __init__(self) -> None:
         self.pred: Optional[InstancePrediction] = None
         self.table: Table = self._empty_table
 
@@ -71,7 +70,8 @@ class RankingTable:
         table.add_column("Rank", justify="center", width=6)
         table.add_column("Callsign", width=15)
         table.add_column("Score", justify="right", width=10)
-        table.add_column("Confidence Graph", justify="left")
+        table.add_column("Graph", justify="left")
+        table.add_column("Indicators", justify="left", width=25)
         return table
 
     @cached_property
@@ -94,6 +94,7 @@ class RankingTable:
     def _get_row(self, aircraft: ScoredAircraft, rank: int) -> tuple[Text, ...]:
         style = self._get_style(aircraft.score, rank)
         
+        ind_str = ", ".join([ind.name for ind in aircraft.indicators])
         filled = int((aircraft.score / 100.0) * self._BAR_WIDTH)
         bar = "█" * filled + "░" * (self._BAR_WIDTH - filled)
         
@@ -101,7 +102,8 @@ class RankingTable:
             Text(str(rank + 1), style=style),
             Text(aircraft.callsign, style=style),
             Text(f"{aircraft.score:>5.1f}%", style=style),
-            Text(bar, style=style)
+            Text(bar, style=style),
+            Text(ind_str, style=style)
         )
 
     def __rich__(self) -> Table:
@@ -121,14 +123,14 @@ class RankingTable:
             self.table.add_section()
 
             # Add remaining candidates
-            for rank, aircraft in enumerate(self.pred.candidates[1:self.top_n], start=1):
+            for rank, aircraft in enumerate(self.pred.candidates[1:], start=1):
                 self.table.add_row(*self._get_row(aircraft, rank))
 
         return self.table
 
 
 class TerminalSink(PredictionSink):
-    def __init__(self, top_n: int = 5, refresh_per_sec: int = 10):
+    def __init__(self, refresh_per_sec: int = 10):
         self._isatty = sys.stdout.isatty()
 
         if not self._isatty:
@@ -140,7 +142,7 @@ class TerminalSink(PredictionSink):
         
         # State
         self.header = HeaderClock()
-        self.ranks = RankingTable(top_n)
+        self.ranks = RankingTable()
         
         # Layout Setup
         self.layout = Layout()
@@ -153,7 +155,7 @@ class TerminalSink(PredictionSink):
             return
 
         self.ranks.pred = pred
-        self.header.timestamp_ms = pred.timestamp_ms
+        self.header.timestamp = pred.timestamp_ms
 
     async def start(self) -> None:
         if self._isatty and self._live is None:

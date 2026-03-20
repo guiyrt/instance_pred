@@ -1,10 +1,11 @@
+from datetime import datetime
 from typing import Final, Optional
 
 from ..models import ScreenPosition
 
 
 class GazeState:
-    __slots__ = ("pos", "is_fixating", "_last_update_ms")
+    __slots__ = ("pos", "is_fixating", "_last_update")
 
     # Constants
     MAX_FIXATION_PX_SEC: Final[float] = 240.0
@@ -13,14 +14,18 @@ class GazeState:
     def __init__(self):
         self.pos: ScreenPosition | None = None
         self.is_fixating: bool = False
-        self._last_update_ms = 0.0
+        self._last_update: datetime | None = None
 
     @property
     def has_signal(self) -> bool:
         return self.pos is not None
 
-    def update(self, timestamp_ms: int, x: Optional[int], y: Optional[int]) -> None:
-        dt_sec = (timestamp_ms - self._last_update_ms) / 1e3
+    def update(self, current_time: datetime, x: Optional[int], y: Optional[int]) -> None:
+        dt_sec: float = (
+            (current_time - self._last_update).total_seconds()
+            if self._last_update is not None
+            else self._MAX_DT_SEC
+        )
         
         # Skip duplicates or out-of-order packets
         if dt_sec <= 0:
@@ -33,7 +38,7 @@ class GazeState:
         is_continuous = (
             new_pos is not None and 
             self.pos is not None and 
-            dt_sec <= self._MAX_DT_SEC
+            dt_sec < self._MAX_DT_SEC
         )
 
         if is_continuous:
@@ -43,4 +48,4 @@ class GazeState:
             self.is_fixating = False
 
         self.pos = new_pos
-        self._last_update_ms = timestamp_ms
+        self._last_update = current_time

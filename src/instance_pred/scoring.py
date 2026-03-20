@@ -1,53 +1,48 @@
 import math
+from datetime import datetime
 
 from .states import WorldState, AircraftState
-from .models import InstancePrediction, ScoredAircraft, ScorerConfig
+from .models import InstancePrediction, ScoredAircraft, ScorerConfig, AttentionIndicator
 
 class HeuristicScorer:
     """
     Stateful scoring engine.
-    Maintains the current score for every aircraft and updates it based on
-    the passage of time (dt) and the state of the World.
+    Maintains the current score and active indicators for every aircraft.
     """
     def __init__(self, config: ScorerConfig) -> None:
         self.cfg = config
         
         # { callsign: <value> }
         self.scores: dict[str, float] = {}
-        self.targets: dict[str, float] = {}
+        self.active_indicators: dict[str, set[AttentionIndicator]] = {}
         
         # Track time to calculate internal dt
-        self.last_tick_time: float = 0.0
+        self.last_update_time: datetime = datetime.fromtimestamp(0)
     
     def get_prediction(self) -> InstancePrediction:
         values: list[ScoredAircraft] = sorted(
             filter(
                 lambda x: x.score > 1.0,
-                (ScoredAircraft(callsign, score) for callsign, score in self.scores.items()),
+                (
+                    ScoredAircraft(
+                        callsign=callsign, 
+                        score=score, 
+                        indicators=self.active_indicators.get(callsign, set())
+                    ) 
+                    for callsign, score in self.scores.items()
+                ),
             ),
             key=lambda x: x.score,
             reverse=True
         )
 
         return InstancePrediction(
-            self.last_tick_time,
+            self.last_update_time,
             values[0] if values else None,
             values
         )
     
     def _apply_alpha_filter(self, current: float, target: float, dt_s: float) -> float:
-        r"""
-        Calculates the new score based on the Time Independent formulation.
-        
-        The formula is:
-        
-        .. math::
-            \alpha = 1 - e^{-\frac{\Delta t}{\tau}}
-            
-            S_{new} = S_{old} + (S_{target} - S_{old}) \cdot \alpha
-
-        Where :math:`\tau` is either `RISE_TIME` (if target > current) or `DECAY_TIME` (if target <= current).
-        """
         if dt_s <= 0:
             return current
 
@@ -56,60 +51,72 @@ class HeuristicScorer:
         
         return current + (target - current) * alpha
 
-    def _calculate_target(self, aircraft: AircraftState, state: WorldState, is_mouse_idle: bool) -> float:
-        scores = [0]
+    def _evaluate_indicators(self, aircraft: AircraftState, state: WorldState, is_mouse_idle: bool) -> tuple[AttentionIndicator]:
+        """
+        Evaluates the world state and returns all currently active indicators for this aircraft.
+        """
+        indicators = list()
 
         # Pop-up
         if state.popup is not None and aircraft.callsign == state.popup.callsign:
-            scores.append(self.cfg.s_popup_opened)
+            indicators.append(AttentionIndicator.POPUP_OPENED)
 
         # Label
         if aircraft.track_label is not None:
-            # Interacting with label
             if aircraft.track_label.is_selected:
-                scores.append(self.cfg.s_label_selected)
+                indicators.append(AttentionIndicator.LABEL_SELECTED)
 
-            # Mouse hovering on label
             if aircraft.track_label.is_hovered:
-                scores.append(
-                    self.cfg.s_label_hovered
-                    if not is_mouse_idle
-                    else self.cfg.s_label_parked
+                indicators.append(
+                    AttentionIndicator.LABEL_PARKED
+                    if is_mouse_idle 
+                    else AttentionIndicator.LABEL_HOVERED
                 )
 
         # Gaze
         if state.gaze.has_signal and state.gaze.is_fixating:
-            # Looking at label
             if aircraft.track_label is not None and aircraft.track_label.contains(state.gaze.pos, self.cfg.gaze_threshold_label):
-                scores.append(self.cfg.s_fixation_label)
+                indicators.append(AttentionIndicator.LABEL_FIXATION)
 
-            # Looking at aircraft
             if aircraft.track_pos is not None and aircraft.track_pos.pos.dist(state.gaze.pos) <= self.cfg.gaze_threshold_pos:
-                scores.append(self.cfg.s_fixation_pos)
+                indicators.append(AttentionIndicator.AIRCRAFT_FIXATION)
 
-        # Using distance measurement tool
+        # Distance Measurement
         if aircraft.active_dist_measurements:
-            scores.append(self.cfg.s_dist_measurement)
+            indicators.append(AttentionIndicator.DIST_MEASUREMENT)
 
-        return max(scores)
+        return tuple(indicators)
     
-    def compute_scores(self, current_time_ms: float, state: WorldState) -> None:
-        if self.last_tick_time == 0.0:
-            self.last_tick_time = current_time_ms
+    def compute_scores(self, current_time: datetime, state: WorldState) -> None:
+        if self.last_update_time is None:
+            self.last_update_time = current_time
             return
+                
+        is_mouse_idle = state.mouse.is_idle(current_time)
+        airspace = state.get_airspace(current_time)
 
-        dt_s = (current_time_ms - self.last_tick_time) / 1000.0
-        self.last_tick_time = current_time_ms
-        
-        is_mouse_idle = state.mouse.is_idle(current_time_ms)
-        airspace = state.get_airspace(current_time_ms)
-
-        scores = {}
-        targets = {}
+        new_scores = {}
+        new_indicators = {}
 
         for callsign, aircraft in airspace:
-            targets[callsign] = self._calculate_target(aircraft, state, is_mouse_idle)
-            scores[callsign] = self._apply_alpha_filter(self.scores.get(callsign, 0.0), targets[callsign], dt_s)
+            # Determine active indicators
+            indicators = self._evaluate_indicators(aircraft, state, is_mouse_idle)
+            
+            # Derive target score dynamically based on active indicators
+            target_score = max(
+                (self.cfg.indicator_scores[ind] for ind in indicators), 
+                default=0.0
+            )
+            
+            # Apply low-pass filter
+            new_scores[callsign] = self._apply_alpha_filter(
+                self.scores.get(callsign, 0.0),
+                target_score,
+                (current_time - self.last_update_time).total_seconds()
+            )
+            new_indicators[callsign] = indicators
 
-        self.targets = targets
-        self.scores = scores
+        # Update state
+        self.scores = new_scores
+        self.active_indicators = new_indicators
+        self.last_update_time = current_time

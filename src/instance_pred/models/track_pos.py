@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,17 +9,17 @@ from .screen_position import ScreenPosition
 
 @dataclass(frozen=True, slots=True)
 class TrackPos:
-    timestamp_ms: float
+    timestamp: datetime
     pos: ScreenPosition
     is_visible: bool
 
-    def is_stale(self, current_time_ms: float, ttl: int) -> bool:
-        return (current_time_ms - self.timestamp_ms) > ttl
+    def is_stale(self, current_time: datetime, ttl: timedelta) -> bool:
+        return (current_time - self.timestamp) > ttl
     
     @staticmethod
-    def from_proto(payload: asd_events_pb2.TrackScreenPosition, timestamp_ms: int) -> "TrackPos":
+    def from_proto(payload: asd_events_pb2.TrackScreenPosition, timestamp_ms: datetime) -> "TrackPos":
         return TrackPos(
-            timestamp_ms=timestamp_ms,
+            timestamp=timestamp_ms,
             pos=ScreenPosition(payload.x, payload.y),
             is_visible=payload.visible
         )
@@ -26,7 +27,7 @@ class TrackPos:
     @staticmethod
     def from_row(row: tuple[Any, ...]) -> "TrackPos":
         return TrackPos(
-            timestamp_ms=int(row.epoch_ms),
+            timestamp=row.timestamp_ms.to_pydatetime(),
             pos=ScreenPosition(float(row.x), float(row.y)),
             is_visible=bool(row.visible),
         )

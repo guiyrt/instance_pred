@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from dataclasses import dataclass
 from typing import Any
@@ -21,5 +22,5 @@ class EventType(Enum):
 @dataclass(frozen=True, slots=True)
 class RowEvent:
     type: EventType
-    timestamp_ms: float
+    timestamp: datetime
     data: tuple[Any, ...]

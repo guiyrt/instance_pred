@@ -3,6 +3,7 @@ import typer
 from pathlib import Path
 from typing import Annotated, Optional
 import logging
+import nats
 
 # --- Local Imports ---
 from .configs import ServerSettings, OfflineSettings, PlaybackSettings, BulkSettings
@@ -23,22 +24,21 @@ def serve():
     settings = ServerSettings()
     logger = get_logger(settings)
     logger.debug(settings)
-    logger.info(f"Starting Live Engine | ASD: {settings.asd_nats_host} | Gaze: {settings.gaze_zmq_host}")
+    logger.info(f"Starting Live Engine | NATS: {settings.nats_host}")
 
     logging.getLogger("nats").setLevel(logging.CRITICAL)
 
-    # Initialize runner
+    # Reference shared for the NATSSink and to retrieve ASD/Gaze events
+    shared_nc = nats.NATS()
+
     runner = ServerRunner(
-        system=IntentSystem(
-            create_scorer_config(settings)
-        ),
-        sinks=create_sinks(settings),
-        gaze_zmq_host=settings.gaze_zmq_host,
-        asd_nats_host=settings.asd_nats_host,
+        system=IntentSystem(create_scorer_config(settings)),
+        sinks=create_sinks(settings, nc=shared_nc),
+        nc=shared_nc,
+        nats_host=settings.nats_host,
         sampling_interval_ms=settings.sampling_interval_ms
     )
 
-    # Handover to uvicorn
     asyncio.run(runner.run())
 
 @app.command()
@@ -59,7 +59,6 @@ def playback(
     """
     settings = PlaybackSettings()
     logger = get_logger(settings)
-    logger.debug(settings)
     
     # Override and get newly validated settings
     if playback_speed is not None:
@@ -67,6 +66,8 @@ def playback(
 
     # Run with re-validated settings
     settings = _resolve_io(settings, session_dir, output_dir)
+    logger.debug(settings)
+
     _run_offline(settings, logger)
 
 @app.command()
@@ -78,7 +79,7 @@ def bulk(
         "--output", "-o",
         help="Output path. Overrides INTENT__PARQUET__OUTPUT_DIR."
     )] = None,
-    show_terminal_ui: Annotated[bool, typer.Option("--terminal", "-t")] = False
+    show_terminal_ui: Annotated[Optional[bool], typer.Option("--terminal", "-t")] = None
 ):
     """
     Run the engine in Offline Mode on a recorded session file.
@@ -86,11 +87,13 @@ def bulk(
     """
     settings = BulkSettings()
     logger = get_logger(settings)
-    logger.debug(settings)
     
     # Override and get newly validated settings
-    settings.terminal.enabled = show_terminal_ui
+    if show_terminal_ui is not None:
+        settings.terminal.enabled = True
+
     settings = _resolve_io(settings, session_dir, output_dir)
+    logger.debug(settings)
 
     # Run with re-validated settings
     _run_offline(settings, logger)

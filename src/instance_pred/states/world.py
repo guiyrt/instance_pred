@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 from typing import ItemsView, Optional
 
@@ -26,9 +27,9 @@ class WorldState:
         """Key is distance_measurement id, values are aircraft monitored (1 or 2)"""
         self.popup: Popup | None = None
 
-    def _prune(self, current_time_ms: int) -> None:
+    def _prune(self, current_time: datetime) -> None:
         for callsign in list(self._airspace):
-            if self._airspace[callsign].is_stale(current_time_ms):
+            if self._airspace[callsign].is_stale(current_time):
                 del self._airspace[callsign]
 
     def _get_aircraft(self, callsign: str) -> AircraftState:
@@ -37,8 +38,8 @@ class WorldState:
         
         return self._airspace[callsign]
     
-    def get_airspace(self, current_time_ms: int) -> ItemsView[str, AircraftState]:        
-        self._prune(current_time_ms)
+    def get_airspace(self, current_time: datetime) -> ItemsView[str, AircraftState]:        
+        self._prune(current_time)
         return self._airspace.items()
     
     def update_track_label(self, callsign: str, track_label: TrackLabel) -> None:
@@ -81,5 +82,5 @@ class WorldState:
         else:
             logger.warning("Received remove for non-existing measurement_id %d", measurement_id)
                     
-    def process_gaze_event(self, timestamp_ms: int, x: Optional[int], y: Optional[int]) -> None:
-        self.gaze.update(timestamp_ms, x, y)
+    def process_gaze_event(self, current_time: datetime, x: Optional[int], y: Optional[int]) -> None:
+        self.gaze.update(current_time, x, y)

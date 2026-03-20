@@ -1,4 +1,4 @@
 from .base import PredictionSink
-from .http import HttpSink
+from .nats import NATSSink
 from .terminal import TerminalSink
 from .parquet import ParquetSink
