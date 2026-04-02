@@ -16,7 +16,7 @@ class NATSSink(PredictionSink):
     def __init__(
         self,
         nats_host: str,
-        subject: str = "aircraft_attention_target",
+        subject: str = "intent.aircraft_attention_target",
         nc: nats.NATS | None = None
     ):
         self.nats_host = nats_host
@@ -51,13 +51,19 @@ class NATSSink(PredictionSink):
             p = self._proto
             p.Clear()
 
-            p.timestamp.FromDatetime(pred.timestamp_ms)
+            p.timestamp.FromDatetime(pred.timestamp)
             
-            if pred.aircraft is not None: 
-                # Add aircraft and score info
-                p.callsign = pred.aircraft.callsign
-                p.score = pred.aircraft.score
-                p.active_indicators.extend([ind.value for ind in pred.aircraft.indicators])
+            if pred.candidates: 
+                # Assuming candidates are already sorted by score descending in the predictor
+                p.primary_target_callsign = pred.primary_target.callsign
+                
+                # Populate the repeated nested messages
+                for c in pred.candidates:
+                    target_msg = p.targets.add()
+                    target_msg.callsign = c.callsign
+                    target_msg.score = c.score
+                    # Keep values (integers) for NATS efficiency
+                    target_msg.active_indicators.extend([ind.value for ind in c.indicators])
             
             # Serialize to Binary Protobuf and Publish
             await self.nc.publish(self.subject, p.SerializeToString())

@@ -1,5 +1,5 @@
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .states import WorldState, AircraftState
 from .models import InstancePrediction, ScoredAircraft, ScorerConfig, AttentionIndicator
@@ -17,7 +17,7 @@ class HeuristicScorer:
         self.active_indicators: dict[str, set[AttentionIndicator]] = {}
         
         # Track time to calculate internal dt
-        self.last_update_time: datetime = datetime.fromtimestamp(0)
+        self.last_update_time: datetime = datetime.fromtimestamp(0, timezone.utc)
     
     def get_prediction(self) -> InstancePrediction:
         values: list[ScoredAircraft] = sorted(

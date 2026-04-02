@@ -14,9 +14,6 @@ class ScoredAircraft:
 
 @dataclass(frozen=True, slots=True)
 class InstancePrediction:
-    timestamp_ms: datetime
-    aircraft: ScoredAircraft | None
+    timestamp: datetime
+    primary_target: ScoredAircraft | None
     candidates: list[ScoredAircraft] = field(default_factory=list)
-
-    def __bool__(self) -> bool:
-        return self.aircraft is not None

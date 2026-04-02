@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 class ParquetSink(PredictionSink):
     _SCHEMA: Final[pa.Schema] = pa.schema([
-        ("timestamp_ms", pa.timestamp('ms')),
+        ("timestamp", pa.timestamp('ms', tz='UTC')),
         ("callsigns", pa.list_(pa.string())),
-        ("scores", pa.list_(pa.float64())),
-        ("indicators", pa.list_(pa.list_(pa.uint8()))),
+        ("scores", pa.list_(pa.float32())),
+        ("indicators", pa.list_(pa.list_(pa.string()))),
     ])
 
     def __init__(
@@ -150,21 +150,23 @@ class ParquetSink(PredictionSink):
         indicators = [None] * size
 
         for i, pred in enumerate(batch):
-            timestamps[i] = pred.timestamp_ms
+            timestamps[i] = pred.timestamp
             
             callsigns[i] = [c.callsign for c in pred.candidates]
             scores[i] = [c.score for c in pred.candidates]
+            
+            # Extract the human-readable string name
             indicators[i] = [
-                [ind.value for ind in c.indicators] 
+                [ind.name for ind in c.indicators] 
                 for c in pred.candidates
             ]
 
         table = pa.Table.from_arrays(
             [
-                pa.array(timestamps, type=pa.timestamp("ms")),
-                pa.array(callsigns, type=pa.list_(pa.string())),
-                pa.array(scores, type=pa.list_(pa.float32())),
-                pa.array(indicators, type=pa.list_(pa.list_(pa.uint8()))),
+                pa.array(timestamps, type=self._SCHEMA[0].type),
+                pa.array(callsigns, type=self._SCHEMA[1].type),
+                pa.array(scores, type=self._SCHEMA[2].type),
+                pa.array(indicators, type=self._SCHEMA[3].type),
             ],
             schema=self._SCHEMA
         )
@@ -174,7 +176,7 @@ class ParquetSink(PredictionSink):
                 self.output_path, 
                 schema=self._SCHEMA, 
                 compression="zstd",
-                use_dictionary=True
+                use_dictionary=["callsigns"]
             )
         
         self._writer.write_table(table)

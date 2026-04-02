@@ -119,7 +119,8 @@ class RankingTable:
             self.table = self._create_base_table()
 
             # Add top candidate
-            self.table.add_row(*self._get_row(self.pred.aircraft, 0))
+            if self.pred.primary_target is not None:
+                self.table.add_row(*self._get_row(self.pred.primary_target, 0))
             self.table.add_section()
 
             # Add remaining candidates
@@ -155,7 +156,7 @@ class TerminalSink(PredictionSink):
             return
 
         self.ranks.pred = pred
-        self.header.timestamp = pred.timestamp_ms
+        self.header.timestamp = pred.timestamp
 
     async def start(self) -> None:
         if self._isatty and self._live is None:
