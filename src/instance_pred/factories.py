@@ -1,7 +1,9 @@
 import sys
 import logging
 import nats
+from pathlib import Path
 
+from .configs import LoggingConfig
 from .configs import AppSettings
 from .scoring import ScorerConfig
 from .sinks import PredictionSink, ParquetSink, TerminalSink, NATSSink
@@ -23,14 +25,15 @@ def create_scorer_config(settings: AppSettings) -> ScorerConfig:
 
 def create_sinks(
     settings: AppSettings,
-    nc: nats.NATS | None = None
+    nc: nats.NATS | None = None,
+    output_dir: Path | None = None
 ) -> list[PredictionSink]:
     sinks = []
 
     if settings.parquet.enabled:
         sinks.append(
             ParquetSink(
-                output_dir=settings.parquet.output_dir,
+                output_dir=output_dir or settings.parquet.output_dir,
                 max_time_flush_sec=settings.parquet.max_time_flush_sec,
                 drop_when_full=settings.parquet.drop_when_full,
                 max_buffer_size=settings.parquet.max_buffer_size,
@@ -39,12 +42,15 @@ def create_sinks(
         )
     
     if settings.nats.enabled:
-        sinks.append(
-            NATSSink(
-                nats_host=settings.nats.host,
-                nc=nc
+        if nc is not None:
+            sinks.append(
+                NATSSink(
+                    nc=nc,
+                    subject=settings.nats.subject
+                )
             )
-        )
+        else:
+            ValueError("NATS sink enabled, but no NATS instance passed to factory.")
 
     if settings.terminal.enabled:
         if sys.stdout.isatty():
@@ -58,10 +64,10 @@ def create_sinks(
     
     return sinks
 
-def get_logger(settings: AppSettings) -> logging.Logger:
+def get_logger(settings: LoggingConfig) -> logging.Logger:
     logging.basicConfig(
-        level=settings.logging.level,
-        format=settings.logging.format
+        level=settings.level,
+        format=settings.format
     )
     
     return logging.getLogger(__name__)

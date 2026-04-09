@@ -8,7 +8,6 @@ from aware_protos.aware.proto import messages_pb2
 from aware_protos.zhaw.protobuf import gaze_pb2
 
 import nats
-from nats.errors import TimeoutError, NoServersError
 import zlib
 
 from .base import PredictionRunner
@@ -29,75 +28,37 @@ class ServerRunner(PredictionRunner):
         system: IntentSystem,
         sinks: Sequence[PredictionSink],
         nc: nats.NATS,
-        nats_host: str,
         sampling_interval_ms: int,
     ):
         super().__init__(system, sinks, sampling_interval_ms)
         self.nc = nc
-        self.nats_host = nats_host
+        
         self._running = False
+        self._tasks: list[asyncio.Task] = []
 
-    async def _setup_nats(self):
-        """Centralized NATS connection with persistent retry logic."""
-
-        async def disconnected_cb():
-            self.logger.warning("NATS disconnected. NATS will auto-reconnect...")
-            
-        async def reconnected_cb():
-            self.logger.info(f"NATS reconnected to {self.nc.connected_url.netloc}")
-
-        while self._running:
-            try:
-                await self.nc.connect(
-                    self.nats_host,
-                    allow_reconnect=True,
-                    max_reconnect_attempts=-1,
-                    reconnect_time_wait=2,
-                    disconnected_cb=disconnected_cb,
-                    reconnected_cb=reconnected_cb
-                )
-                self.logger.info("Successfully connected to NATS Broker.")
-                break
-            except (TimeoutError, NoServersError, Exception) as e:
-                self.logger.warning(f"Initial NATS connection failed ({type(e).__name__}). Retrying in 5s...")
-                await asyncio.sleep(5)
-
-    async def run(self):
+    async def start(self):
         """The main entry point for the application."""
         self.logger.info("Starting Intent Engine...")
         self._running = True
         
-        await self._setup_nats()
         await self.start_sinks()
 
         # Create the tasks for our 3 concurrent loops
-        tasks = (
+        self._tasks = [
             asyncio.create_task(self._gaze_loop(), name="Gaze_NATS"),
             asyncio.create_task(self._asd_loop(), name="ASD_NATS"),
             asyncio.create_task(self._predict_loop(), name="Predictor")
-        )
+        ]
 
-        try:
-            # Run all loops until one fails or are cancelled
-            await asyncio.gather(*tasks)
-        except asyncio.CancelledError:
-            self.logger.info("Shutdown signal received.")
-        except Exception as e:
-            self.logger.critical(f"Unexpected system crash: {e}", exc_info=True)
-        finally:
-            self._running = False
-            for t in tasks:
-                t.cancel()
-            
-            await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # Cleanly drain and close the single NATS connection
-            if self.nc and self.nc.is_connected:
-                self.logger.info("Draining NATS connection...")
-                await self.nc.drain()
-                
-            await self.close_sinks()
-            self.logger.info("Shutdown complete.")
+    async def stop(self) -> None:
+        self._running = False
+
+        for t in self._tasks:
+            t.cancel()
+
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        await self.close_sinks()
+        self.logger.info("Shutdown complete.")
     
     def _parse_proto(self, payload: str) -> messages_pb2.Event:
         return google.protobuf.json_format.Parse(

@@ -13,7 +13,8 @@ class AppSettings(BaseSettings):
     # Intent
     scores: ScoreSettings = Field(default_factory=ScoreSettings)
     sampling_interval_ms: PositiveInt = 100
-    
+    nats_host: str = "nats://localhost:4222"
+
     # Sinks
     parquet: BaseParquetSinkConfig
     nats: NATSSinkConfig = Field(default_factory=NATSSinkConfig)
@@ -34,17 +35,14 @@ class AppSettings(BaseSettings):
 # <<< App settings for running in server >>>
 class ServerSettings(AppSettings):
     parquet: ServerParquetSinkConfig = Field(default_factory=ServerParquetSinkConfig)
-    nats_host: str = "nats://localhost:4222"
+
+class OrchestratedSettings(ServerSettings):
+    data_dir: Path = "./data"
+    health_subject: str = "intent.health.attention"
+    cmds_subject: str = "intent.cmds.attention"
 
 # <<< Base offline settings, plus specific for bulk and playback executions
-class OfflineSettings(AppSettings):
+class BulkSettings(AppSettings):
+    parquet: BulkParquetSinkConfig = Field(default_factory=BulkParquetSinkConfig)
     session_path: Optional[Path] = None
     playback_speed: Optional[PositiveFloat]
-
-class BulkSettings(OfflineSettings):
-    parquet: BulkParquetSinkConfig = Field(default_factory=BulkParquetSinkConfig)
-    playback_speed: Optional[PositiveFloat] = None
-
-class PlaybackSettings(OfflineSettings):
-    parquet: ServerParquetSinkConfig = Field(default_factory=ServerParquetSinkConfig)
-    playback_speed: Optional[PositiveFloat] = 1.0
