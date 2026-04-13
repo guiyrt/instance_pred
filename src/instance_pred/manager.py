@@ -23,18 +23,23 @@ class PredictionManager:
         self.nc = nc
         self.runner: ServerRunner | None = None
         self._heartbeat_task: asyncio.Task | None = None
+
+    @property
+    def is_recording(self) -> bool:
+        return self.runner is not None
     
-    async def start(self, session_id: str) -> None:
+    async def start(self, sub_dir: str | None = None) -> None:
         """Creates and starts a fresh runner with new sinks."""
         if self.runner:
             raise RuntimeError("Engine is already running a session.")
-
-        logger.info(f"Starting Prediction Engine. Session ID: {session_id}")
         
-        # UI sends folder names (e.g., "P01_S01"). We resolve it to our local volume.
-        session_path = self.data_dir / session_id
+        session_path = (
+            self.data_dir / sub_dir
+            if sub_dir is not None
+            else self.data_dir
+        )
         session_path.mkdir(parents=True, exist_ok=True)
-        
+
         self.runner = ServerRunner(
             system=IntentSystem(create_scorer_config(self.settings)),
             sinks=create_sinks(self.settings, nc=self.nc, output_dir=session_path),
@@ -42,6 +47,7 @@ class PredictionManager:
             sampling_interval_ms=self.settings.sampling_interval_ms
         )
 
+        logger.info(f"Starting Prediction Engine. Output dir: {session_path}")
         await self.runner.start()
 
     async def stop(self) -> None:
@@ -58,7 +64,11 @@ class PredictionManager:
             try:
                 while not stop_event.is_set():
                     if self.nc.is_connected:
-                        await self.nc.publish(self.health_subject, b"1")
+                        await self.nc.publish(
+                            self.settings.health_subject,
+                            json.dumps({"is_recording": self.is_recording}).encode()
+                        )
+                    
                     await asyncio.sleep(1)
             except asyncio.CancelledError:
                 pass
@@ -71,8 +81,7 @@ class PredictionManager:
                 cmd = data.get("cmd")
                 
                 if cmd == "start":
-                    # We expect 'session_dir' from the UI orchestrator
-                    await self.start(data.get("session_dir", "default_session"))
+                    await self.start(data.get("session_id", None))
                     await msg.respond(json.dumps({"status": "ok"}).encode())
                 
                 elif cmd == "stop":
