@@ -7,7 +7,7 @@ services:
     user: 1000:1000
 
     volumes:
-      - /home/regd/AWARE/apr25/:/app/data/
+      - /home/ternuser/zhaw/data/:/app/data/
     
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -19,7 +19,6 @@ services:
 
       # Parquet Sink Configuration
       - INTENT__PARQUET__ENABLED=true
-      - INTENT__PARQUET__OUTPUT_DIR=/app/data/
       - INTENT__PARQUET__MAX_TIME_FLUSH_SEC=30
 
       - INTENT__NATS__ENABLED=true
@@ -30,6 +29,3 @@ services:
       
       # Logging
       - INTENT__LOGGING__LEVEL=DEBUG
-    
-volumes:
-  data:

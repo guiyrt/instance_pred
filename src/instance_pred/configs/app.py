@@ -13,7 +13,9 @@ class AppSettings(BaseSettings):
     # Intent
     scores: ScoreSettings = Field(default_factory=ScoreSettings)
     sampling_interval_ms: PositiveInt = 100
+    
     nats_host: str = "nats://localhost:4222"
+    data_dir: Path = "./data"
 
     # Sinks
     parquet: BaseParquetSinkConfig
@@ -37,7 +39,6 @@ class ServerSettings(AppSettings):
     parquet: ServerParquetSinkConfig = Field(default_factory=ServerParquetSinkConfig)
 
 class OrchestratedSettings(ServerSettings):
-    data_dir: Path = "./data"
     health_subject: str = "intent.health.attention"
     cmds_subject: str = "intent.cmds.attention"
 

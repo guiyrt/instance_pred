@@ -8,7 +8,7 @@ class GazeState:
     __slots__ = ("pos", "is_fixating", "_last_update")
 
     # Constants
-    MAX_FIXATION_PX_SEC: Final[float] = 240.0
+    MAX_FIXATION_PX_SEC: Final[float] = 1_000.0 # TODO: Validate fixation velocity value
     _MAX_DT_SEC: Final[float] = 0.5
     
     def __init__(self):

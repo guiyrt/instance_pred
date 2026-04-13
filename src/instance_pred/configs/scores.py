@@ -9,9 +9,10 @@ class TauSettings(BaseModel):
     rise: PositiveFloat = 0.2
     decay: PositiveFloat = 1.0
 
+# TODO: Validate thresholds (px)
 class GazeThresholdSettings(BaseModel):
-    track_label: PositiveInt = 50
-    track_pos: PositiveInt = 100
+    track_label: PositiveInt = 200
+    track_pos: PositiveInt = 200
 
 class ScoreSettings(BaseModel):
     # Settings

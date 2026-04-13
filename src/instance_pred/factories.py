@@ -33,7 +33,7 @@ def create_sinks(
     if settings.parquet.enabled:
         sinks.append(
             ParquetSink(
-                output_dir=output_dir or settings.parquet.output_dir,
+                output_dir=output_dir or settings.data_dir,
                 max_time_flush_sec=settings.parquet.max_time_flush_sec,
                 drop_when_full=settings.parquet.drop_when_full,
                 max_buffer_size=settings.parquet.max_buffer_size,

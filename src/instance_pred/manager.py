@@ -34,7 +34,7 @@ class PredictionManager:
             raise RuntimeError("Engine is already running a session.")
         
         session_path = (
-            self.data_dir / sub_dir
+            self.data_dir / sub_dir / "intent"
             if sub_dir is not None
             else self.data_dir
         )

@@ -4,7 +4,6 @@ from pydantic import BaseModel, PositiveInt, model_validator
 
 class BaseParquetSinkConfig(BaseModel):
     enabled: bool = True
-    output_dir: Path = Path("./data")
     max_time_flush_sec: Optional[PositiveInt]
     drop_when_full: bool
     max_buffer_size: PositiveInt
