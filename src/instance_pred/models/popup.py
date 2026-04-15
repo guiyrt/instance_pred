@@ -10,6 +10,7 @@ class PopupMenu(StrEnum):
     CFLMenu = "CFLMenu"
     HeadingMenu = "HeadingMenu"
     WaypointMenu = "WaypointMenu"
+    ASPMenu = "ASPMenu"
 
 
 @dataclass(frozen=True, slots=True)
