@@ -3,7 +3,6 @@ import logging
 import nats
 from pathlib import Path
 
-from .configs import LoggingConfig
 from .configs import AppSettings
 from .scoring import ScorerConfig
 from .sinks import PredictionSink, ParquetSink, TerminalSink, NATSSink
@@ -63,11 +62,3 @@ def create_sinks(
             logger.info("TerminalSink disabled: stdout is not a TTY (headless environment).")
     
     return sinks
-
-def get_logger(settings: LoggingConfig) -> logging.Logger:
-    logging.basicConfig(
-        level=settings.level,
-        format=settings.format
-    )
-    
-    return logging.getLogger(__name__)
