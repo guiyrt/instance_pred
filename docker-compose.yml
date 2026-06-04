@@ -14,7 +14,7 @@ services:
     environment:
       - INTENT__DATA_DIR=/app/data
       - INTENT__NATS_HOST=nats://127.0.0.1:4222
-      - INTENT__SAMPLING_INTERVAL_MS=100
+      - INTENT__SAMPLING_INTERVAL_MS=500
 
       # Parquet Sink Configuration
       - INTENT__PARQUET__ENABLED=true
